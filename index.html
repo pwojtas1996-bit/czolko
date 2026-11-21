@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Czółko</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  html, body { margin: 0; height: 100%; background: #111; color: #fff; font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; overflow: hidden; touch-action: manipulation; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+  .screen.on { display: flex; }
+
+  /* Game screens are always landscape: in portrait they are rotated 90° */
+  .land { width: 100vw; height: 100vh; }
+  @media (orientation: portrait) {
+    .land { width: 100vh; height: 100vw; inset: auto; top: 0; left: 100vw; transform-origin: top left; transform: rotate(90deg); }
+  }
+
+  /* MENU */
+  #menu { padding: 20px 16px 24px; overflow-y: auto; gap: 14px; }
+  h1 { margin: 4px 0 0; font-size: 34px; letter-spacing: -0.5px; }
+  .sub { color: #aaa; margin: 0; font-size: 15px; line-height: 1.4; }
+  .label { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-top: 6px; }
+  .cats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .cat { background: #222; border: 2px solid #222; border-radius: 14px; padding: 14px 12px; font-size: 16px; font-weight: 600; text-align: left; color: #fff; }
+  .cat span { display: block; font-size: 24px; margin-bottom: 4px; }
+  .cat.sel { border-color: #ffd23f; background: #2a2614; }
+  .start { margin-top: 8px; background: #ffd23f; color: #111; border: 0; border-radius: 16px; padding: 18px; font-size: 20px; font-weight: 800; }
+  .how { background: #1a1a1a; border-radius: 14px; padding: 14px; font-size: 14px; color: #bbb; line-height: 1.6; }
+  .how b { color: #fff; }
+
+  /* GAME */
+  #game { background: #1d3557; }
+  #game.ok { background: #2a9d4a; }
+  #game.pass { background: #d62839; }
+  .wbar { height: 8px; background: rgba(255,255,255,.18); pointer-events: none; }
+  .wfill { height: 100%; width: 100%; background: #ffd23f; transition: width 1s linear; }
+  .wfill.low { background: #ff5a5f; }
+  .bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; font-size: clamp(18px, 4.5vmin, 30px); font-weight: 700; pointer-events: none; }
+  .word { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 5%; font-size: clamp(36px, 14vmin, 140px); font-weight: 900; line-height: 1.05; pointer-events: none; word-break: break-word; }
+  .hint { text-align: center; padding: 0 0 14px; font-size: clamp(13px, 3vmin, 18px); opacity: .6; font-weight: 700; letter-spacing: .5px; pointer-events: none; }
+  .quit { position: absolute; bottom: 10px; left: 14px; z-index: 3; background: rgba(0,0,0,.3); border: 0; color: #fff; border-radius: 20px; padding: 6px 14px; font-size: 14px; }
+
+  /* COUNTDOWN */
+  #count { background: #1d3557; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+  #countNum { font-size: 40vmin; font-weight: 900; line-height: 1; }
+  #countTxt { font-size: clamp(16px, 4vmin, 26px); color: #cfe; padding: 0 20px; }
+
+  /* RESULT */
+  #result { padding: 20px 16px 24px; overflow-y: auto; gap: 12px; }
+  .score { font-size: 64px; font-weight: 900; color: #ffd23f; line-height: 1; }
+  .list { display: flex; flex-direction: column; gap: 6px; }
+  .item { display: flex; justify-content: space-between; background: #1c1c1c; border-radius: 10px; padding: 10px 14px; font-size: 17px; }
+  .item.g { border-left: 5px solid #2a9d4a; }
+  .item.r { border-left: 5px solid #d62839; color: #999; }
+  .row { display: flex; gap: 10px; }
+  .row button { flex: 1; }
+  .ghost { background: #222; color: #fff; border: 0; border-radius: 16px; padding: 18px; font-size: 18px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<section id="menu" class="screen on">
+  <h1>Czółko 🤔</h1>
+  <p class="sub">Telefon poziomo na czoło, ekranem do znajomych. Oni podpowiadają, Ty zgadujesz.</p>
+
+  <div class="label">Kategoria</div>
+  <div class="cats" id="cats"></div>
+
+  <button class="start" id="startBtn">Start</button>
+  <p class="sub" id="tiltStatus" style="font-size:13px"></p>
+
+  <div class="how">
+    🔟 Runda to <b>10 haseł</b>, na każde masz <b>30 sekund</b>.<br>
+    ✅ Zgadłeś? <b>Rusz telefonem</b> w dowolną stronę.<br>
+    ❌ Pas? <b>Stuknij w ekran</b> gdziekolwiek.<br>
+    Po każdym haśle przytrzymaj telefon chwilę nieruchomo przy czole.<br>
+    <span style="opacity:.8">Bez czujnika ruchu: zgadnięte = przytrzymaj palec na ekranie.</span>
+  </div>
+</section>
+
+<section id="count" class="screen land">
+  <div id="countNum">3</div>
+  <div id="countTxt">Przyłóż telefon do czoła!</div>
+</section>
+
+<section id="game" class="screen land">
+  <button class="quit" id="quitBtn">✕ Zakończ</button>
+  <div class="wbar"><div class="wfill" id="wfill"></div></div>
+  <div class="bar"><span id="progress">1/10</span><span id="wtime">⏱ 30</span><span>✔ <span id="pts">0</span></span></div>
+  <div class="word" id="word"></div>
+  <div class="hint" id="hint">RUCH = ZGADNIĘTE · STUKNIĘCIE = PAS</div>
+</section>
+
+<section id="result" class="screen">
+  <div class="label">Wynik</div>
+  <div class="score" id="final">0</div>
+  <p class="sub" id="finalSub"></p>
+  <div class="row">
+    <button class="start" id="againBtn">Jeszcze raz</button>
+    <button class="ghost" id="menuBtn">Menu</button>
+  </div>
+  <div class="list" id="list"></div>
+</section>
+
+<script>
+const DECKS = {
+  zwierzeta: { icon: "🐘", name: "Zwierzęta", words: ["Słoń","Żyrafa","Pingwin","Kangur","Krokodyl","Leniwiec","Jeż","Bóbr","Żubr","Delfin","Ośmiornica","Flaming","Wielbłąd","Kameleon","Papuga","Sowa","Lis","Wiewiórka","Nosorożec","Hipopotam","Pająk","Ślimak","Mrówka","Pszczoła","Koala","Panda","Zebra","Rekin","Wieloryb","Kret","Bocian","Lama","Szop pracz","Struś","Foka","Żółw","Gołąb","Chomik","Jamnik","Mors"] },
+  filmy: { icon: "🎬", name: "Filmy i seriale", words: ["Titanic","Shrek","Harry Potter","Gwiezdne wojny","Matrix","Król Lew","Kevin sam w domu","Ojciec chrzestny","Forrest Gump","Szczęki","Park Jurajski","Gra o tron","Breaking Bad","Przyjaciele","Stranger Things","Wiedźmin","Kiler","Miś","Rejs","Seksmisja","Chłopaki nie płaczą","Ranczo","Świat według Kiepskich","Pulp Fiction","Avatar","Joker","Batman","Spider-Man","Piraci z Karaibów","Władca Pierścieni","Gladiator","Incepcja","Mamma Mia","Kraina lodu","Toy Story","Nemo","Rocky","Terminator","Bękarty wojny","Squid Game"] },
+  zawody: { icon: "👷", name: "Zawody", words: ["Strażak","Policjant","Lekarz","Dentysta","Pilot","Kucharz","Fryzjer","Nauczyciel","Listonosz","Hydraulik","Elektryk","Stolarz","Ogrodnik","Weterynarz","Kelner","Barman","Kierowca autobusu","Astronauta","Detektyw","Sędzia","Prawnik","Aktor","Piosenkarz","DJ","Fotograf","Operator kamery","Montażysta","Youtuber","Influencer","Programista","Architekt","Rolnik","Rybak","Piekarz","Krawiec","Ratownik","Kominiarz","Iluzjonista","Klaun","Ksiądz"] },
+  jedzenie: { icon: "🍕", name: "Jedzenie", words: ["Pizza","Pierogi","Bigos","Schabowy","Rosół","Żurek","Gołąbki","Sushi","Kebab","Hamburger","Frytki","Naleśniki","Placki ziemniaczane","Obwarzanek","Zapiekanka","Spaghetti","Lody","Tort","Pączek","Sernik","Szarlotka","Popcorn","Arbuz","Banan","Cytryna","Ananas","Czosnek","Cebula","Ogórek kiszony","Jajecznica","Kanapka","Hot dog","Tacos","Ramen","Barszcz","Oscypek","Galaretka","Budyń","Chipsy","Kawa"] },
+  postacie: { icon: "🦸", name: "Postacie", words: ["Myszka Miki","Kubuś Puchatek","Smerf","Batman","Superman","Kapitan Ameryka","Spider-Man","Hulk","Shrek","Pinokio","Czerwony Kapturek","Królewna Śnieżka","Kopciuszek","Święty Mikołaj","Smok Wawelski","Reksio","Bolek i Lolek","Koziołek Matołek","Pan Kleks","Sherlock Holmes","James Bond","Indiana Jones","Darth Vader","Yoda","Gandalf","Frodo","Geralt","Mario","Pikachu","Sonic","Hello Kitty","Garfield","Scooby-Doo","Homer Simpson","Wiedźma","Pirat","Wampir","Zombie","Mumia","Robin Hood"] },
+  czynnosci: { icon: "🕺", name: "Czynności", words: ["Pływanie","Taniec","Gotowanie","Prasowanie","Odkurzanie","Jazda na rowerze","Jazda na nartach","Wspinaczka","Łowienie ryb","Malowanie","Śpiewanie","Gra na gitarze","Robienie selfie","Chrapanie","Kichanie","Ziewanie","Żonglowanie","Medytacja","Joga","Boks","Karaoke","Szukanie kluczy","Parkowanie","Golenie","Mycie zębów","Pakowanie walizki","Składanie mebli","Robienie zdjęć","Montowanie filmu","Bieganie","Skakanie na skakance","Rąbanie drewna","Lepienie bałwana","Granie w szachy","Gwizdanie","Puszczanie latawca","Dojenie krowy","Wiązanie butów","Zmiana pieluchy","Sprzątanie"] },
+  mix: { icon: "🎲", name: "Mieszanka", words: null }
+};
+DECKS.mix.words = Object.keys(DECKS).filter(k => k !== "mix").flatMap(k => DECKS[k].words);
+
+const ROUND_WORDS = 10, WORD_TIME = 30;
+let selCats = new Set(["mix"]);
+const $ = id => document.getElementById(id);
+function show(id){ document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); }
+
+// Menu
+const catsEl = $("cats");
+Object.entries(DECKS).forEach(([k, d]) => {
+  const b = document.createElement("button");
+  b.className = "cat" + (selCats.has(k) ? " sel" : "");
+  b.innerHTML = `<span>${d.icon}</span>${d.name}`;
+  b.onclick = () => {
+    if (k === "mix") selCats = new Set(["mix"]);
+    else { selCats.delete("mix"); selCats.has(k) ? selCats.delete(k) : selCats.add(k); if (!selCats.size) selCats.add("mix"); }
+    [...catsEl.children].forEach((el, i) => el.classList.toggle("sel", selCats.has(Object.keys(DECKS)[i])));
+  };
+  catsEl.appendChild(b);
+});
+
+// Sound
+let actx = null;
+function beep(freq, dur = 0.12, type = "sine", vol = 0.25) {
+  try {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  } catch (e) {}
+}
+
+// ---- Motion: any movement = correct ----
+const isIOS = typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function";
+let sensorOK = false, motionBound = false;
+let touching = false, baseline = null, armAt = 0, stillSince = 0, prev = null;
+const MOVE_THRESHOLD = 5;   // m/s² change in gravity vector (~30° tilt) or a jerk
+const STILL_MS = 400;       // phone must be still this long before the next word can be confirmed
+
+$("tiltStatus").textContent = "";
+
+function onMotion(e) {
+  const g = e.accelerationIncludingGravity;
+  if (!g || g.x == null) return;
+  if (!sensorOK) { sensorOK = true; updateHint(); }
+  const v = [g.x, g.y, g.z], now = Date.now();
+  const jitter = prev ? Math.hypot(v[0]-prev[0], v[1]-prev[1], v[2]-prev[2]) : 0;
+  prev = v;
+  if (!running || locked) { baseline = null; return; }
+  if (now < armAt || touching) { baseline = null; stillSince = 0; return; }
+  if (!baseline) {
+    // wait until the phone is held still, then remember its position
+    if (jitter < 1.2) { if (!stillSince) stillSince = now; if (now - stillSince > STILL_MS) baseline = v; }
+    else stillSince = 0;
+    return;
+  }
+  const d = Math.hypot(v[0]-baseline[0], v[1]-baseline[1], v[2]-baseline[2]);
+  if (d > MOVE_THRESHOLD) answer(true);
+}
+
+async function enableMotion() {
+  if (motionBound) return;
+  try {
+    if (isIOS) {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r !== "granted") { setNoSensor("Brak zgody na czujnik ruchu."); return; }
+    }
+    window.addEventListener("devicemotion", onMotion);
+    motionBound = true;
+    setTimeout(() => { if (!sensorOK) setNoSensor("Czujnik ruchu niedostępny w tym oknie."); }, 1500);
+  } catch (e) { setNoSensor("Czujnik ruchu niedostępny w tym oknie."); }
+}
+function setNoSensor(msg) {
+  $("tiltStatus").textContent = "⚠️ " + msg + " Zgadnięte = przytrzymaj palec na ekranie.";
+  updateHint();
+}
+function updateHint() {
+  $("hint").textContent = sensorOK ? "RUCH = ZGADNIĘTE · STUKNIĘCIE = PAS" : "PRZYTRZYMAJ = ZGADNIĘTE · STUKNIĘCIE = PAS";
+  if (sensorOK) $("tiltStatus").textContent = "✅ Czujnik ruchu działa.";
+}
+
+// ---- Game ----
+let deck = [], idx = 0, results = [], tick = null, locked = false, running = false, wordLeft = WORD_TIME;
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function buildDeck() {
+  const words = selCats.has("mix") ? DECKS.mix.words : [...selCats].flatMap(k => DECKS[k].words);
+  return shuffle([...new Set(words)]);
+}
+
+function startGame() {
+  enableMotion();
+  beep(1, 0.01, "sine", 0.001);
+  try {
+    const el = document.documentElement;
+    const p = (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    if (p && p.then) p.then(() => screen.orientation?.lock?.("landscape").catch(() => {})).catch(() => {});
+  } catch (e) {}
+  deck = buildDeck(); idx = 0; results = [];
+  show("count");
+  let n = 3;
+  $("countNum").textContent = n; beep(600);
+  const cd = setInterval(() => {
+    n--;
+    if (n > 0) { $("countNum").textContent = n; beep(600); }
+    else { clearInterval(cd); beep(900, 0.25); runRound(); }
+  }, 1000);
+}
+
+function runRound() {
+  running = true; locked = false;
+  $("pts").textContent = "0";
+  show("game");
+  nextWord();
+  tick = setInterval(() => {
+    if (locked) return;
+    wordLeft--;
+    renderWordTimer();
+    if (wordLeft <= 0) { answer(false); return; }
+    if (wordLeft <= 5) beep(500, 0.08);
+  }, 1000);
+}
+
+function renderWordTimer() {
+  $("wtime").textContent = "⏱ " + wordLeft;
+  const f = $("wfill");
+  f.style.width = (wordLeft / WORD_TIME * 100) + "%";
+  f.classList.toggle("low", wordLeft <= 5);
+}
+
+function nextWord() {
+  if (idx >= deck.length) deck = deck.concat(shuffle(buildDeck()));
+  $("word").textContent = deck[idx];
+  $("game").className = "screen land on";
+  $("progress").textContent = (results.length + 1) + "/" + ROUND_WORDS;
+  wordLeft = WORD_TIME;
+  baseline = null; stillSince = 0; armAt = Date.now() + 300;
+  const f = $("wfill");
+  f.style.transition = "none"; renderWordTimer(); void f.offsetWidth; f.style.transition = "";
+}
+
+function answer(ok) {
+  if (!running || locked) return;
+  locked = true;
+  results.push({ w: deck[idx], ok });
+  $("pts").textContent = results.filter(r => r.ok).length;
+  $("game").className = "screen land on " + (ok ? "ok" : "pass");
+  $("word").textContent = ok ? "DOBRZE!" : "PAS";
+  ok ? (beep(880, 0.1), setTimeout(() => beep(1320, 0.15), 90)) : beep(220, 0.25, "square", 0.12);
+  idx++;
+  setTimeout(() => {
+    if (!running) return;
+    if (results.length >= ROUND_WORDS) { endGame(); return; }
+    nextWord(); locked = false;
+  }, 900);
+}
+
+function endGame() {
+  if (!running) return;
+  running = false; clearInterval(tick);
+  beep(300, 0.5, "sawtooth", 0.15);
+  try { document.fullscreenElement && document.exitFullscreen(); } catch (e) {}
+  const good = results.filter(r => r.ok).length;
+  $("final").textContent = good + "/" + results.length;
+  $("finalSub").textContent = `Zgadnięte: ${good} · Pasy: ${results.length - good}`;
+  $("list").innerHTML = results.map(r => `<div class="item ${r.ok ? "g" : "r"}"><span>${r.w}</span><span>${r.ok ? "✔" : "✖"}</span></div>`).join("");
+  show("result");
+}
+
+// Tap anywhere = pass; long press = correct (fallback without sensor)
+let pressTimer = null, pressFired = false;
+const gameEl = $("game");
+gameEl.addEventListener("pointerdown", e => {
+  if (e.target.id === "quitBtn") return;
+  e.preventDefault();
+  touching = true;
+  pressFired = false;
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(() => { pressFired = true; answer(true); }, 600);
+});
+gameEl.addEventListener("pointerup", e => {
+  if (e.target.id === "quitBtn") return;
+  clearTimeout(pressTimer);
+  setTimeout(() => { touching = false; }, 300);
+  if (!pressFired) answer(false);
+});
+gameEl.addEventListener("pointercancel", () => { clearTimeout(pressTimer); touching = false; });
+gameEl.addEventListener("contextmenu", e => e.preventDefault());
+$("quitBtn").addEventListener("click", e => { e.stopPropagation(); endGame(); });
+$("startBtn").onclick = startGame;
+$("againBtn").onclick = startGame;
+$("menuBtn").onclick = () => show("menu");
+</script>
+</body>
+</html>
